@@ -18,6 +18,8 @@ def train_model(
         epochs,
         learning_rate,
 ):
+    if epochs < 1:
+        raise ValueError("epochs must be at least 1")
 
     X_train = np.asarray(X_train, dtype=float)
     X_val = np.asarray(X_val, dtype=float)
@@ -29,6 +31,16 @@ def train_model(
         "train_loss": [],
         "val_loss": [],
     }
+
+    #Find layers that contain trainable parameters
+    dense_layers = [
+        layer for layer in model.layers
+        if hasattr(layer, "weights") and hasattr(layer, "biases")
+    ]
+
+    best_val_loss = np.inf
+    best_epoch = None
+    best_parameter = None
 
     for epoch in range(epochs):
         # Forward pass
@@ -56,5 +68,25 @@ def train_model(
 
         history["train_loss"].append(float(train_loss))
         history["val_loss"].append(float(val_loss))
+
+        # Save a checkpoint whenever validation loss improves
+        if val_loss < best_val_loss:
+            best_val_loss = float(val_loss)
+            best_epoch = epoch + 1
+
+            best_parameters = [
+                (layer.weights.copy(), layer.biases.copy())
+                for layer in dense_layers
+            ]
+
+    # Restore the best checkpoint
+    for layer, (weights, biases) in zip(
+        dense_layers, best_parameters
+    ):
+        layer.weights = weights.copy()
+        layer.biases = biases.copy()
+
+    history["best_epoch"] = best_epoch
+    history["best_val_loss"] = best_val_loss
 
     return history
