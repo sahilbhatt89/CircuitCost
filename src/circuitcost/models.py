@@ -31,11 +31,11 @@ class ReLU:
 class NeuralNetworks:
     def __init__(self,n_inputs):
         self.layers = [
-            DenseLayer(n_inputs,16),
+            DenseLayer(n_inputs,32),
             ReLU(),
-            DenseLayer(16,8),
+            DenseLayer(32,16),
             ReLU(),
-            DenseLayer(8,1),
+            DenseLayer(16,1),
         ]
 
     def forward(self, input):
