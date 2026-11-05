@@ -1,0 +1,88 @@
+{
+  "provenance": "Evaluation of the previously frozen seed-42 checkpoint; no retraining or model selection performed for this report.",
+  "benchmark": "Polybench GEMM",
+  "device": "xczu9eg-ffvb1156-2-i",
+  "dataset_revision": "e05bebec02ab3b80648e45377ffc91702ea8d2dd",
+  "features": [
+    "clk_target(ns)",
+    "clk_estimated(ns)",
+    "clk_uncertainty(ns)",
+    "bram",
+    "dsp",
+    "ff",
+    "lut",
+    "c_num_arith",
+    "c_num_logic",
+    "rtl_num_arith",
+    "rtl_num_logic"
+  ],
+  "architecture": [
+    11,
+    32,
+    16,
+    1
+  ],
+  "seed": 42,
+  "split_seed": 42,
+  "max_epochs": 50000,
+  "selected_epoch": 2336,
+  "learning_rate": 1e-06,
+  "target_scaling": "none",
+  "split_counts": {
+    "train": 371,
+    "validation": 80,
+    "test": 80
+  },
+  "csv_sha256": {
+    "post_hls_info.csv": "e7e94fa28422f91a277c618342a9bf0d3689ee09dcda100638482db6ae8564f1",
+    "post_implementation_info.csv": "f462c10583c3de5cc920482407146eb579193ce497a4e35922035bbc7372127e"
+  },
+  "verification_environment": {
+    "python": "3.13.7",
+    "packages": {
+      "numpy": "2.5.4",
+      "pandas": "3.1.0",
+      "scikit-learn": "1.9.1",
+      "scipy": "1.18.1",
+      "matplotlib": "3.11.2",
+      "joblib": "1.6.0"
+    }
+  },
+  "metrics": {
+    "validation": {
+      "HLS estimate": {
+        "MAE": 5758.975,
+        "RMSE": 9836.975107979079,
+        "R2": 0.38462011607466495
+      },
+      "Linear regression": {
+        "MAE": 936.8941084785929,
+        "RMSE": 1595.8770558037872,
+        "R2": 0.9838035806650093
+      },
+      "Custom MLP": {
+        "MAE": 548.199200180554,
+        "RMSE": 891.6860885465695,
+        "R2": 0.994943568444261
+      }
+    },
+    "test": {
+      "HLS estimate": {
+        "MAE": 5025.4625,
+        "RMSE": 8018.330374055437,
+        "R2": 0.6379775904653863
+      },
+      "Linear regression": {
+        "MAE": 812.2552808031712,
+        "RMSE": 1023.7106037261311,
+        "R2": 0.9940990495797596
+      },
+      "Custom MLP": {
+        "MAE": 603.5926750976699,
+        "RMSE": 1157.3214359056653,
+        "R2": 0.9924581905303079
+      }
+    }
+  },
+  "range_definition": "Fixed descriptive actual-LUT intervals: [0,5000), [5000,15000), [15000,infinity). These bins did not select model parameters."
+}
