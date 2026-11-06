@@ -15,4 +15,5 @@ build/
 
 # Local datasets and notebook checkpoints
 /ML4Accel-Dataset/
+/artifacts/
 .ipynb_checkpoints/

@@ -5,20 +5,34 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "circuitcost"
 version = "0.1.0"
-description = "Python workspace for CircuitCost"
+description = "Predict FPGA implementation LUT usage from HLS features"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "Apache-2.0"
-dependencies = []
+dependencies = [
+    "numpy>=2.0,<3",
+    "pandas>=2.2,<4",
+    "scikit-learn>=1.5,<2",
+    "matplotlib>=3.8,<4",
+    "joblib>=1.4,<2",
+]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8,<10",
     "ruff>=0.14,<1",
 ]
+notebooks = [
+    "jupyterlab>=4,<5",
+    "ipykernel>=6,<8",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
 
 [tool.ruff]
 target-version = "py311"

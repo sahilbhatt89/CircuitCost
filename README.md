@@ -1,58 +1,61 @@
 # CircuitCost
 
-CircuitCost explores prediction of FPGA implementation resource usage from
-high-level synthesis (HLS) estimates. The current experiment predicts the
-implementation LUT count of Polybench GEMM designs on the
-`xczu9eg-ffvb1156-2-i` FPGA.
+Predict FPGA implementation LUT usage from high-level synthesis (HLS) features.
+CircuitCost compares the original HLS LUT estimate, linear regression, and a
+neural network implemented from scratch with Python and NumPy, including explicit
+backpropagation. The completed experiment covers **531 Polybench GEMM designs**
+on **xczu9eg-ffvb1156-2-i**.
 
-The project compares the original HLS estimate, a scikit-learn linear regression
-baseline, and a neural network implemented from scratch with Python and NumPy.
-The neural network includes explicit forward propagation, backpropagation, and
-gradient-descent updates.
+The selected MLP has architecture **11 → 32 → 16 → 1**, ReLU hidden activations,
+and a linear output. Training restores copied parameters from the epoch with
+the lowest validation MSE.
 
 ## Setup
 
-Requirements: Python 3.11 or newer and GNU Make.
-
-From the project root:
+Requirements: Python 3.11+, GNU Make, and Git. From the project root:
 
 ```sh
 make setup
 source .venv/bin/activate
-python -m pip install numpy pandas scikit-learn matplotlib jupyterlab ipykernel
 python -c "import circuitcost; print(circuitcost.__file__)"
 ```
 
-`make setup` creates `.venv` and installs this Python package in editable mode,
-plus Pytest and Ruff. The notebook and numerical dependencies are installed
-explicitly above because they are not yet declared in `pyproject.toml`.
-To select a specific interpreter, use `make setup PYTHON=python3.13`.
+Numerical dependencies (NumPy, Pandas, scikit-learn, Matplotlib, and Joblib) are
+declared in `pyproject.toml`. `make setup` also installs Pytest and Ruff. To
+select an interpreter, use `make setup PYTHON=python3.13`.
 
-Launch JupyterLab from the activated environment:
+For notebooks:
 
 ```sh
+make notebooks
 python -m jupyterlab
 ```
 
-In VS Code, select `.venv/bin/python` as the notebook kernel. If using another
-environment, install the project into that notebook's environment with
-`%pip install -e "/absolute/path/to/CircuitCost"`, then restart the kernel and
-rerun the cells. Notebook variables exist only in their running kernel.
+Select `.venv/bin/python` as the notebook kernel in VS Code. To install into a
+different active kernel, run `%pip install -e ".."` from either notebook folder,
+then restart that kernel. Saving a notebook does not preserve its live variables.
 
-## Dataset
+The numerical versions used to verify the frozen experiment are pinned in
+[`constraints-recorded.txt`](constraints-recorded.txt). To use those versions:
+
+```sh
+python -m pip install -c constraints-recorded.txt -e ".[dev,notebooks]"
+```
+
+The verification used Python 3.13.7. This constraints file pins numerical
+libraries; it is not a complete operating-system or BLAS environment lock.
+
+## Local dataset
 
 Data comes from [UT-LCA/ML4Accel-Dataset](https://github.com/UT-LCA/ML4Accel-Dataset).
-The dataset clone is local to this workspace and excluded from this repository
-by `.gitignore`.
-
-From the project root, clone the dataset if it is not already present:
+The dataset and experiment artifacts are ignored by Git. Clone the dataset from
+the project root if it is not already present:
 
 ```sh
 git clone https://github.com/UT-LCA/ML4Accel-Dataset.git ML4Accel-Dataset
 ```
 
-The GEMM CSVs used here are available in the dataset's Git history. Restore only
-the two CSVs from the recorded revision:
+Restore the two GEMM CSVs from the recorded historical revision:
 
 ```sh
 csv_dir="fpga_ml_dataset/HLS_dataset/polybench/gemm/xczu9eg-ffvb1156-2-i"
@@ -64,42 +67,52 @@ git -C ML4Accel-Dataset restore \
   "$csv_dir/post_implementation_info.csv"
 ```
 
-This places both files under:
+The files reside under `ML4Accel-Dataset/$csv_dir/`. The first supplies HLS
+features; the second supplies implementation `Total LUTs`.
 
-```text
-ML4Accel-Dataset/fpga_ml_dataset/HLS_dataset/polybench/gemm/xczu9eg-ffvb1156-2-i/
-```
+[`load_designs`](src/circuitcost/data.py) explicitly joins the tables by `prj`
+with one-to-one validation. It rejects duplicate, blank, or unmatched identifiers
+and nonfinite measurements. HLS file order is preserved for reproducible splits;
+the implementation CSV may be reordered without changing design/target pairing.
+`prj` is retained as the index for tracking split membership, not as a feature.
 
-| File | Contents |
-| --- | --- |
-| `post_hls_info.csv` | HLS resource estimates, timing estimates, and design features |
-| `post_implementation_info.csv` | Implementation resource counts, timing, and power metrics |
+Notebook paths are resolved relative to the checkout. Launch a notebook from
+the project root or its notebook directory; no user-specific paths are needed.
 
-The current pair contains 531 designs. The shared `prj` identifier is unique
-within each CSV for this benchmark and device. Verify identifiers and row order
-before selecting features and targets directly from separate tables:
+## Reproduce the final workflow
 
-```python
-assert hls["prj"].equals(impl["prj"]), "Design rows are not aligned"
-```
+Open [`Notebboks/finalExperiment.ipynb`](Notebboks/finalExperiment.ipynb) in a
+fresh kernel and run its cells in order:
 
-Both notebooks currently contain an absolute dataset path from the original
-workspace. Update their `data_dir` cells to point to the directory above on your
-machine before running them.
+1. Load and validate matched designs.
+2. Split using seed 42: 371 training, 80 validation, and 80 test designs.
+3. Fit input `StandardScaler` on training data only; targets remain in LUT units.
+4. Train the MLP or load the existing local frozen checkpoint and scaler.
+5. Compare validation metrics with the HLS and linear-regression baselines.
+6. Optionally repeat initialization seeds and reproduce the recorded test evaluation.
 
-## Notebook workflow
+The notebook controls are:
 
-Run cells in order, starting with:
+| Setting | Default | Effect |
+| --- | --- | --- |
+| `RUN_TRAINING` | True when no local weights exist | Otherwise load the saved candidate; set True to retrain |
+| `RUN_SEED_CHECKS` | False | Run two additional 50,000-epoch seed experiments |
+| `EVALUATE_TEST` | False | Reproduce the already recorded frozen test evaluation |
 
-1. [Dataset exploration](<Data Exploration/understandDataset.ipynb>): inspect
-   schemas, missing values, design identifiers, summary statistics, histograms,
-   and HLS-versus-implementation scatterplots.
-2. [Data preparation and model comparison](Notebboks/dataPrep.ipynb): select
-   features, split and standardize data, evaluate baselines, train the custom
-   network, and inspect validation errors and learning curves.
+Training uses seed 42, full-batch gradient descent, MSE loss, learning rate
+`1e-6`, and a 50,000-epoch budget. The recorded candidate selected **epoch 2,336**.
+Checkpoint selection restores the best parameters after completing the budget;
+early stopping is not implemented. History entries are MSE in squared LUTs;
+their square roots are RMSE in LUTs. The last history entry need not describe
+the restored model.
 
-The current target is implementation `Total LUTs`. Inputs are these 11 HLS
-columns; `prj` is used for matching designs, not as a numerical feature:
+New artifacts include weights, the fitted scaler, the linear baseline, feature
+order, configuration, split IDs, CSV checksums, and package versions. Existing
+checkpoints are checked against feature order, split membership, and the fitted
+scaler before loading. To reproduce a frozen evaluation, keep the candidate
+fixed and do not use test results to select another model.
+
+The inputs are:
 
 ```text
 clk_target(ns), clk_estimated(ns), clk_uncertainty(ns),
@@ -107,105 +120,77 @@ bram, dsp, ff, lut,
 c_num_arith, c_num_logic, rtl_num_arith, rtl_num_logic
 ```
 
-The split is approximately 70% training, 15% validation, and 15% testing,
-using `random_state=42`: 371 training designs, 80 validation designs, and
-80 test designs. `StandardScaler` is fitted on training features and then
-applied to validation and test features. Targets remain in original LUT units.
+The other notebooks are retained for learning:
 
-## Custom neural network
+- [Dataset exploration](<Data Exploration/understandDataset.ipynb>): schemas,
+  identifier checks, distributions, and HLS-versus-implementation plots.
+- [Working experiment notes](Notebboks/dataPrep.ipynb): the original progression
+  of diagnostics and training experiments. It imports the current model class;
+  old experiment cells do not reconstruct earlier architectures automatically.
 
-The model in [models.py](src/circuitcost/models.py) has this architecture:
+Notebook outputs are cleared to avoid displaying stale results after changing
+data loading. Published results are recorded separately below.
 
-```text
-11 inputs -> Dense(16) -> ReLU -> Dense(8) -> ReLU -> Dense(1)
-```
+## Final results
 
-`DenseLayer` implements parameter initialization, forward and backward
-calculations, and parameter updates. `ReLU` implements the activation and its
-gradient. `NeuralNetworks` connects the layers and propagates values forward
-and gradients backward; the output layer is linear.
+| Model | Validation MAE | Validation RMSE | Test MAE | Test RMSE | Test R² |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| HLS estimate | 5,758.98 | 9,836.98 | 5,025.46 | 8,018.33 | 0.637978 |
+| Linear regression | 936.89 | 1,595.88 | 812.26 | **1,023.71** | **0.994099** |
+| Custom NumPy MLP | **548.20** | **891.69** | **603.59** | 1,157.32 | 0.992458 |
 
-[train.py](src/circuitcost/train.py) implements mean squared error (MSE), its
-gradient, and full-batch gradient descent. Each epoch calculates gradients from
-all training designs and updates parameters once. Training and validation
-losses are recorded after the update; validation does not update parameters.
+Errors are in LUTs; lower MAE/RMSE and higher R² are better. R² is not percentage
+accuracy. The MLP reduced test MAE by **25.7%** but increased test RMSE by
+**13.1%** relative to linear regression. Neither model dominates across both
+metrics. Recorded seed-7 and seed-21 validation RMSEs were 1,102.23 and 1,023.80.
 
-After preparing the notebook variables, the current training call is:
+The MLP has lower aggregate MAE and RMSE in the test groups below 15,000 actual
+LUTs, while linear regression performs better in the group of 12 designs at or
+above that size. This tail
+explains why the simpler model remains competitive on RMSE. These descriptive
+size groups were not used to choose predictions.
 
-```python
-import numpy as np
-from circuitcost.models import NeuralNetworks
-from circuitcost.train import train_model
+Read [`docs/FINAL_FINDINGS.md`](docs/FINAL_FINDINGS.md) for the range-level
+analysis, interpretation, and limits. The experiment covers related GEMM
+configurations on one FPGA. It does **not** establish generalization to unrelated
+circuits, new kernels, different devices, or different synthesis tool versions.
 
-np.random.seed(42)
-model = NeuralNetworks(n_inputs=X_train_scaled.shape[1])
+Machine-readable summaries are in [`reports/`](reports/): verified aggregate
+metrics and data fingerprints, descriptive test-range errors, and recorded
+initialization-seed results. The numerical scores were rechecked against the
+existing frozen checkpoint; no new model was selected for the final report.
 
-history = train_model(
-    model,
-    X_train_scaled,
-    y_train,
-    X_val_scaled,
-    y_val,
-    epochs=1000,
-    learning_rate=0.000001,
-)
-
-predictions = model.forward(X_val_scaled).ravel()
-```
-
-`history["train_loss"]` and `history["val_loss"]` contain MSE in squared LUTs.
-Their square roots give RMSE in LUTs. Recreating `model` initializes new
-parameters, so retain the trained instance when evaluating it.
-
-## Recorded validation results
-
-These scores are saved outputs from `Notebboks/dataPrep.ipynb` for the
-GEMM/device pair and split described above. The custom network used
-`np.random.seed(42)`, 1,000 epochs, and a learning rate of `0.000001`.
-
-| Model | MAE (LUTs) | RMSE (LUTs) | R² |
-| --- | ---: | ---: | ---: |
-| HLS estimate (`prediction = lut`) | 5,758.98 | 9,836.98 | 0.3846 |
-| Linear regression | 936.89 | 1,595.88 | 0.9838 |
-| Custom NumPy neural network | 3,044.42 | 5,796.02 | 0.7864 |
-
-Lower MAE and RMSE are better; higher R² is better. R² is not percentage
-accuracy. Linear regression currently performs best on this validation split.
-The saved custom-network run has a final training RMSE of 4,833.22 LUTs and
-validation RMSE of 5,796.02 LUTs.
-
-These are exploratory results from one benchmark, FPGA device, and random
-split. The test set is reserved for final evaluation. Further experiments
-should compare models on the same validation examples and report errors in
-original LUT units.
-
-## Project structure
-
-```text
-CircuitCost/
-├── Data Exploration/understandDataset.ipynb
-├── Notebboks/dataPrep.ipynb
-├── src/circuitcost/
-│   ├── __init__.py
-│   ├── models.py
-│   └── train.py
-├── tests/README.md
-├── ML4Accel-Dataset/   # Local clone, ignored by Git
-├── Makefile
-├── pyproject.toml
-└── README.md
-```
-
-## Development
+## Automated checks
 
 ```sh
-make check   # Check Python style and formatting
+make test    # Dataset-independent tests
+make check   # Ruff lint, format checks, and tests
 ```
 
-Checks are scoped to `src/` and `tests/`. There are currently no automated
-Python tests; `make check` does not train models or evaluate predictions.
-Future tests can be placed under `tests/` and run with
-`python -m pytest tests`.
+Tests cover forward-output shapes; dense-layer and complete-network
+finite-difference gradients; ReLU gradients; restoration of an earlier best
+checkpoint's weights and biases after later updates; table matching with
+reordered implementation rows; invalid design IDs and measurements; and
+LUT-range summary boundaries. They use synthetic data and temporary CSVs, so
+the external dataset and saved artifacts are not needed for `make check`.
 
-The project is licensed under [Apache License 2.0](LICENSE). Consult the source
+## Project layout
+
+```text
+src/circuitcost/
+    data.py          # Checked prj join and portable dataset discovery
+    models.py        # Dense layers, ReLU, and 32/16 MLP
+    train.py         # MSE, full-batch updates, best-checkpoint restoration
+    evaluation.py    # Metrics and descriptive LUT-range summaries
+Notebboks/finalExperiment.ipynb
+Notebboks/dataPrep.ipynb
+Data Exploration/understandDataset.ipynb
+tests/
+docs/FINAL_FINDINGS.md
+reports/
+ML4Accel-Dataset/     # Local, ignored
+artifacts/           # Local, ignored
+```
+
+CircuitCost is licensed under [Apache License 2.0](LICENSE). Consult the source
 dataset's documentation for its usage terms and attribution.
